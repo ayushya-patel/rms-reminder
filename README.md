@@ -21,14 +21,14 @@ A macOS utility that automatically reminds you to check in and check out on the 
 ### Quick Install
 
 ```bash
-curl -sL https://raw.githubusercontent.com/YOUR_USERNAME/rms-reminder/main/install.sh | bash
+bash <(curl -sL https://raw.githubusercontent.com/ayushya-patel/rms-reminder/main/install.sh)
 ```
 
 ### Manual Install
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/rms-reminder.git
+   git clone https://github.com/ayushya-patel/rms-reminder.git
    cd rms-reminder
    ```
 

@@ -8,10 +8,9 @@
 # - Check-out: Reminds between 6-7 PM while at office
 #
 # Requirements: macOS, Google Chrome
+#
+# INSTALL: bash <(curl -sL https://raw.githubusercontent.com/ayushya-patel/rms-reminder/main/install.sh)
 # ============================================
-
-# IMPORTANT: Redirect stdin from /dev/tty to allow user input when piped
-exec < /dev/tty
 
 echo "========================================"
 echo "  RMS Reminder - Installation Script"
@@ -23,21 +22,21 @@ echo "First, let's find your office IP address."
 echo "Make sure you're connected to your office network."
 echo ""
 printf "Press Enter to detect your current IP, or type an IP manually: "
-read MANUAL_IP
+read MANUAL_IP </dev/tty
 
 if [ -z "$MANUAL_IP" ]; then
     OFFICE_IP=$(curl -s --max-time 10 https://api.ipify.org)
     if [ -z "$OFFICE_IP" ]; then
         echo "❌ Could not detect IP. Please enter it manually."
         printf "Enter your office IP: "
-        read OFFICE_IP
+        read OFFICE_IP </dev/tty
     else
         echo "✓ Detected IP: $OFFICE_IP"
         printf "Is this your office IP? (y/n): "
-        read CONFIRM
+        read CONFIRM </dev/tty
         if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
             printf "Enter the correct office IP: "
-            read OFFICE_IP
+            read OFFICE_IP </dev/tty
         fi
     fi
 else
@@ -93,7 +92,7 @@ for key, val in profiles.items():
     else
         echo ""
         printf "Enter the number of your profile (where you use RMS) [1-$TOTAL_PROFILES]: "
-        read PROFILE_NUM
+        read PROFILE_NUM </dev/tty
 
         # Validate input
         if [[ "$PROFILE_NUM" =~ ^[0-9]+$ ]] && [ "$PROFILE_NUM" -ge 1 ] && [ "$PROFILE_NUM" -le "$TOTAL_PROFILES" ]; then
@@ -114,11 +113,11 @@ echo ""
 
 # Get checkout reminder time
 printf "Checkout reminder start hour (default 18 for 6 PM): "
-read CHECKOUT_START
+read CHECKOUT_START </dev/tty
 CHECKOUT_START=${CHECKOUT_START:-18}
 
 printf "Checkout reminder end hour (default 19 for 7 PM): "
-read CHECKOUT_END
+read CHECKOUT_END </dev/tty
 CHECKOUT_END=${CHECKOUT_END:-19}
 
 echo ""
