@@ -10,8 +10,6 @@
 # Requirements: macOS, Google Chrome
 # ============================================
 
-set -e
-
 echo "========================================"
 echo "  RMS Reminder - Installation Script"
 echo "========================================"
@@ -21,18 +19,22 @@ echo ""
 echo "First, let's find your office IP address."
 echo "Make sure you're connected to your office network."
 echo ""
-read -p "Press Enter to detect your current IP, or type an IP manually: " MANUAL_IP
+printf "Press Enter to detect your current IP, or type an IP manually: "
+read MANUAL_IP
 
 if [ -z "$MANUAL_IP" ]; then
     OFFICE_IP=$(curl -s --max-time 10 https://api.ipify.org)
     if [ -z "$OFFICE_IP" ]; then
         echo "❌ Could not detect IP. Please enter it manually."
-        read -p "Enter your office IP: " OFFICE_IP
+        printf "Enter your office IP: "
+        read OFFICE_IP
     else
         echo "✓ Detected IP: $OFFICE_IP"
-        read -p "Is this your office IP? (y/n): " CONFIRM
+        printf "Is this your office IP? (y/n): "
+        read CONFIRM
         if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
-            read -p "Enter the correct office IP: " OFFICE_IP
+            printf "Enter the correct office IP: "
+            read OFFICE_IP
         fi
     fi
 else
@@ -45,37 +47,58 @@ echo ""
 
 # Get Chrome profile
 echo "Now let's find your Chrome profile."
-echo "Available profiles:"
 echo ""
 
 PROFILES_DIR="$HOME/Library/Application Support/Google/Chrome"
-if [ -d "$PROFILES_DIR" ]; then
-    i=1
-    declare -a PROFILE_DIRS
-    while IFS= read -r line; do
-        profile_dir=$(echo "$line" | cut -d: -f1)
-        profile_name=$(echo "$line" | cut -d: -f2-)
-        echo "  $i) $profile_name"
-        PROFILE_DIRS[$i]="$profile_dir"
-        ((i++))
-    done < <(
-        cat "$PROFILES_DIR/Local State" 2>/dev/null | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
+LOCAL_STATE="$PROFILES_DIR/Local State"
+
+if [ -f "$LOCAL_STATE" ]; then
+    echo "Available profiles:"
+    echo ""
+
+    # Get profiles into a temp file for reliable reading
+    TEMP_PROFILES=$(mktemp)
+    python3 -c "
+import json
+with open('$LOCAL_STATE', 'r') as f:
+    data = json.load(f)
 profiles = data.get('profile', {}).get('info_cache', {})
 for key, val in profiles.items():
     if key not in ['System Profile', 'Guest Profile']:
-        print(f\"{key}:{val.get('name', 'Unknown')} ({val.get('user_name', 'No email')})\")
-" 2>/dev/null
-    )
+        name = val.get('name', 'Unknown')
+        email = val.get('user_name', '')
+        if email:
+            print(f'{key}|{name} ({email})')
+        else:
+            print(f'{key}|{name}')
+" > "$TEMP_PROFILES" 2>/dev/null
 
-    echo ""
-    read -p "Enter the number of your profile (where you use RMS): " PROFILE_NUM
-    CHROME_PROFILE="${PROFILE_DIRS[$PROFILE_NUM]}"
+    # Display profiles with numbers
+    i=1
+    while IFS='|' read -r dir name; do
+        echo "  $i) $name"
+        eval "PROFILE_$i=\"$dir\""
+        i=$((i + 1))
+    done < "$TEMP_PROFILES"
 
-    if [ -z "$CHROME_PROFILE" ]; then
-        echo "Invalid selection. Using 'Default' profile."
+    TOTAL_PROFILES=$((i - 1))
+    rm -f "$TEMP_PROFILES"
+
+    if [ "$TOTAL_PROFILES" -eq 0 ]; then
+        echo "  No profiles found. Using 'Default'."
         CHROME_PROFILE="Default"
+    else
+        echo ""
+        printf "Enter the number of your profile (where you use RMS) [1-$TOTAL_PROFILES]: "
+        read PROFILE_NUM
+
+        # Validate input
+        if [[ "$PROFILE_NUM" =~ ^[0-9]+$ ]] && [ "$PROFILE_NUM" -ge 1 ] && [ "$PROFILE_NUM" -le "$TOTAL_PROFILES" ]; then
+            eval "CHROME_PROFILE=\$PROFILE_$PROFILE_NUM"
+        else
+            echo "Invalid selection. Using 'Default' profile."
+            CHROME_PROFILE="Default"
+        fi
     fi
 else
     echo "Chrome profiles directory not found. Using 'Default' profile."
@@ -87,10 +110,12 @@ echo "Chrome profile set to: $CHROME_PROFILE"
 echo ""
 
 # Get checkout reminder time
-read -p "Checkout reminder start hour (default 18 for 6 PM): " CHECKOUT_START
+printf "Checkout reminder start hour (default 18 for 6 PM): "
+read CHECKOUT_START
 CHECKOUT_START=${CHECKOUT_START:-18}
 
-read -p "Checkout reminder end hour (default 19 for 7 PM): " CHECKOUT_END
+printf "Checkout reminder end hour (default 19 for 7 PM): "
+read CHECKOUT_END
 CHECKOUT_END=${CHECKOUT_END:-19}
 
 echo ""
@@ -241,6 +266,9 @@ echo "✓ Created ~/Scripts/rms-checkin-reminder.sh"
 # Create LaunchAgent
 mkdir -p ~/Library/LaunchAgents
 
+# Get actual home directory path for plist
+ACTUAL_HOME=$(eval echo ~)
+
 cat > ~/Library/LaunchAgents/com.rms.checkin-reminder.plist << PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -252,7 +280,7 @@ cat > ~/Library/LaunchAgents/com.rms.checkin-reminder.plist << PLIST_EOF
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>$HOME/Scripts/rms-checkin-reminder.sh</string>
+        <string>${ACTUAL_HOME}/Scripts/rms-checkin-reminder.sh</string>
     </array>
 
     <key>StartInterval</key>
@@ -278,7 +306,7 @@ PLIST_EOF
 echo "✓ Created LaunchAgent"
 
 # Load the LaunchAgent
-launchctl unload ~/Library/LaunchAgents/com.rms.checkin-reminder.plist 2>/dev/null
+launchctl unload ~/Library/LaunchAgents/com.rms.checkin-reminder.plist 2>/dev/null || true
 launchctl load ~/Library/LaunchAgents/com.rms.checkin-reminder.plist
 
 echo "✓ Started the reminder service"
