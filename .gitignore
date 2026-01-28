@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# State files
+.rms_checkin_state
