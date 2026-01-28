@@ -4,10 +4,8 @@
 # RMS Check-in/Check-out Reminder - Installer
 # ============================================
 # This script sets up automatic reminders for RMS attendance
-# - Check-in: Notifies once when you arrive at office (IP range based)
+# - Check-in: Notifies once when you arrive at office
 # - Check-out: Reminds once after 8 hours of check-in
-#
-# Office IP Range: 202.71.24.226 to 202.71.24.237
 #
 # Requirements: macOS, Google Chrome
 #
@@ -17,8 +15,6 @@
 echo "========================================"
 echo "  RMS Reminder - Installation Script"
 echo "========================================"
-echo ""
-echo "Office IP Range: 202.71.24.226 - 202.71.24.237"
 echo ""
 
 # Get Chrome profile
@@ -95,9 +91,11 @@ cat > ~/Scripts/rms-checkin-reminder.sh << 'SCRIPT_EOF'
 # - Check-in: Once when IP is within office range
 # - Check-out: Once, 8 hours after check-in (if at office when 8h complete)
 
-# Office IP Range: 202.71.24.226 to 202.71.24.237
-IP_RANGE_START="202.71.24.226"
-IP_RANGE_END="202.71.24.237"
+# Office IP Range (encoded)
+_RS="MjAyLjcxLjI0LjIyNg=="
+_RE="MjAyLjcxLjI0LjIzNw=="
+IP_RANGE_START=$(echo "$_RS" | base64 -d)
+IP_RANGE_END=$(echo "$_RE" | base64 -d)
 
 RMS_URL="https://portal.devxlabs.ai/checkin"
 STATE_FILE="$HOME/.rms_checkin_state"
@@ -179,7 +177,6 @@ main() {
     fi
 
     echo "Current IP: $CURRENT_IP"
-    echo "Office IP Range: $IP_RANGE_START - $IP_RANGE_END"
     echo "Today: $TODAY"
     echo "Current timestamp: $CURRENT_TIMESTAMP"
 
@@ -191,9 +188,9 @@ main() {
     echo "Check-in timestamp: $checkin_timestamp"
     echo "Checkout done: $checkout_done"
 
-    # Check if it's a new day - reset state
+    # Check if it's a new day - reset checkout state
     if [ "$checkin_date" != "$TODAY" ]; then
-        echo "New day detected, resetting state"
+        echo "New day detected, resetting checkout state"
         save_state "checkout_done" ""
         checkout_done=""
     fi
@@ -211,7 +208,7 @@ main() {
         else
             echo "Already sent check-in reminder today"
 
-            # 2. Check-out reminder (once, 8 hours after check-in)
+            # 2. Check-out reminder (once, 8 hours after check-in, if at office)
             if [ -n "$checkin_timestamp" ] && [ "$checkout_done" != "$TODAY" ]; then
                 local seconds_since_checkin=$((CURRENT_TIMESTAMP - checkin_timestamp))
                 local hours_since_checkin=$((seconds_since_checkin / 3600))
@@ -221,7 +218,7 @@ main() {
                 echo "Hours since check-in: $hours_since_checkin"
 
                 if [ "$seconds_since_checkin" -ge "$required_seconds" ]; then
-                    echo "8 hours completed and still at office - sending check-out reminder"
+                    echo "8 hours completed and at office - sending check-out reminder"
                     send_notification "RMS Reminder" "8 hours completed! Time to check out." "open"
                     save_state "checkout_done" "$TODAY"
                 else
@@ -305,13 +302,12 @@ echo "  Installation Complete!"
 echo "========================================"
 echo ""
 echo "Configuration:"
-echo "  • Office IP Range: 202.71.24.226 - 202.71.24.237"
 echo "  • Chrome Profile: $CHROME_PROFILE"
 echo "  • Checkout Reminder: 8 hours after check-in"
 echo ""
 echo "How it works:"
 echo "  • Check-in reminder when you arrive at office"
-echo "  • Check-out reminder once after 8 hours (if still at office)"
+echo "  • Check-out reminder once after 8 hours (if at office)"
 echo ""
 echo "Useful commands:"
 echo "  • Test now:    ~/Scripts/rms-checkin-reminder.sh"
