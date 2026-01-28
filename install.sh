@@ -4,8 +4,10 @@
 # RMS Check-in/Check-out Reminder - Installer
 # ============================================
 # This script sets up automatic reminders for RMS attendance
-# - Check-in: Notifies once when you arrive at office
-# - Check-out: Reminds between 6-7 PM while at office
+# - Check-in: Notifies once when you arrive at office (IP range based)
+# - Check-out: Reminds once after 8 hours of check-in
+#
+# Office IP Range: 202.71.24.226 to 202.71.24.237
 #
 # Requirements: macOS, Google Chrome
 #
@@ -16,39 +18,11 @@ echo "========================================"
 echo "  RMS Reminder - Installation Script"
 echo "========================================"
 echo ""
-
-# Get office IP
-echo "First, let's find your office IP address."
-echo "Make sure you're connected to your office network."
-echo ""
-printf "Press Enter to detect your current IP, or type an IP manually: "
-read MANUAL_IP </dev/tty
-
-if [ -z "$MANUAL_IP" ]; then
-    OFFICE_IP=$(curl -s --max-time 10 https://api.ipify.org)
-    if [ -z "$OFFICE_IP" ]; then
-        echo "❌ Could not detect IP. Please enter it manually."
-        printf "Enter your office IP: "
-        read OFFICE_IP </dev/tty
-    else
-        echo "✓ Detected IP: $OFFICE_IP"
-        printf "Is this your office IP? (y/n): "
-        read CONFIRM </dev/tty
-        if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
-            printf "Enter the correct office IP: "
-            read OFFICE_IP </dev/tty
-        fi
-    fi
-else
-    OFFICE_IP="$MANUAL_IP"
-fi
-
-echo ""
-echo "Office IP set to: $OFFICE_IP"
+echo "Office IP Range: 202.71.24.226 - 202.71.24.237"
 echo ""
 
 # Get Chrome profile
-echo "Now let's find your Chrome profile."
+echo "Let's find your Chrome profile."
 echo ""
 
 PROFILES_DIR="$HOME/Library/Application Support/Google/Chrome"
@@ -97,6 +71,7 @@ for key, val in profiles.items():
         # Validate input
         if [[ "$PROFILE_NUM" =~ ^[0-9]+$ ]] && [ "$PROFILE_NUM" -ge 1 ] && [ "$PROFILE_NUM" -le "$TOTAL_PROFILES" ]; then
             eval "CHROME_PROFILE=\$PROFILE_$PROFILE_NUM"
+            echo "✓ Selected profile: $CHROME_PROFILE"
         else
             echo "Invalid selection. Using 'Default' profile."
             CHROME_PROFILE="Default"
@@ -108,21 +83,6 @@ else
 fi
 
 echo ""
-echo "Chrome profile set to: $CHROME_PROFILE"
-echo ""
-
-# Get checkout reminder time
-printf "Checkout reminder start hour (default 18 for 6 PM): "
-read CHECKOUT_START </dev/tty
-CHECKOUT_START=${CHECKOUT_START:-18}
-
-printf "Checkout reminder end hour (default 19 for 7 PM): "
-read CHECKOUT_END </dev/tty
-CHECKOUT_END=${CHECKOUT_END:-19}
-
-echo ""
-echo "Checkout reminders will appear between ${CHECKOUT_START}:00 and ${CHECKOUT_END}:00"
-echo ""
 
 # Create Scripts directory
 mkdir -p ~/Scripts
@@ -132,23 +92,46 @@ cat > ~/Scripts/rms-checkin-reminder.sh << 'SCRIPT_EOF'
 #!/bin/bash
 
 # RMS Check-in/Check-out Reminder Script
-# - Check-in: Once when you arrive at office
-# - Check-out: Reminds between configured hours while still at office
+# - Check-in: Once when IP is within office range
+# - Check-out: Once, 8 hours after check-in (if still at office)
 
-OFFICE_IP="__OFFICE_IP__"
+# Office IP Range: 202.71.24.226 to 202.71.24.237
+IP_RANGE_START="202.71.24.226"
+IP_RANGE_END="202.71.24.237"
+
 RMS_URL="https://portal.devxlabs.ai/checkin"
 STATE_FILE="$HOME/.rms_checkin_state"
 CHROME_PROFILE="__CHROME_PROFILE__"
 TODAY=$(date +%Y-%m-%d)
-CURRENT_HOUR=$(date +%H)
+CURRENT_TIMESTAMP=$(date +%s)
 
-# Checkout reminder window (24-hour format)
-CHECKOUT_START_HOUR=__CHECKOUT_START__
-CHECKOUT_END_HOUR=__CHECKOUT_END__
+# Hours before checkout reminder
+HOURS_BEFORE_CHECKOUT=8
 
 # Get current public IP
 get_current_ip() {
     curl -s --max-time 5 https://api.ipify.org 2>/dev/null
+}
+
+# Convert IP to number for comparison
+ip_to_number() {
+    local ip="$1"
+    local a b c d
+    IFS='.' read -r a b c d <<< "$ip"
+    echo $((a * 256 ** 3 + b * 256 ** 2 + c * 256 + d))
+}
+
+# Check if IP is within office range
+is_office_ip() {
+    local ip="$1"
+    local ip_num=$(ip_to_number "$ip")
+    local start_num=$(ip_to_number "$IP_RANGE_START")
+    local end_num=$(ip_to_number "$IP_RANGE_END")
+
+    if [ "$ip_num" -ge "$start_num" ] && [ "$ip_num" -le "$end_num" ]; then
+        return 0  # true - in range
+    fi
+    return 1  # false - not in range
 }
 
 # Send macOS notification
@@ -165,7 +148,7 @@ send_notification() {
     fi
 }
 
-# Get state for a specific key (format in file: key=value, one per line)
+# Get state for a specific key
 get_state() {
     local key="$1"
     if [ -f "$STATE_FILE" ]; then
@@ -178,22 +161,12 @@ save_state() {
     local key="$1"
     local value="$2"
 
-    # Create file if doesn't exist
     touch "$STATE_FILE"
 
-    # Remove old key if exists, then add new
     if grep -q "^$key=" "$STATE_FILE" 2>/dev/null; then
         sed -i '' "/^$key=/d" "$STATE_FILE"
     fi
     echo "$key=$value" >> "$STATE_FILE"
-}
-
-# Check if within checkout reminder window
-is_checkout_time() {
-    if [ "$CURRENT_HOUR" -ge "$CHECKOUT_START_HOUR" ] && [ "$CURRENT_HOUR" -lt "$CHECKOUT_END_HOUR" ]; then
-        return 0  # true
-    fi
-    return 1  # false
 }
 
 # Main logic
@@ -206,47 +179,75 @@ main() {
     fi
 
     echo "Current IP: $CURRENT_IP"
-    echo "Office IP: $OFFICE_IP"
+    echo "Office IP Range: $IP_RANGE_START - $IP_RANGE_END"
     echo "Today: $TODAY"
-    echo "Current hour: $CURRENT_HOUR"
+    echo "Current timestamp: $CURRENT_TIMESTAMP"
 
     local checkin_date=$(get_state "checkin_date")
-    local checkout_date=$(get_state "checkout_date")
+    local checkin_timestamp=$(get_state "checkin_timestamp")
+    local checkout_done=$(get_state "checkout_done")
 
     echo "Last check-in date: $checkin_date"
-    echo "Last check-out date: $checkout_date"
+    echo "Check-in timestamp: $checkin_timestamp"
+    echo "Checkout done: $checkout_done"
 
-    if [ "$CURRENT_IP" = "$OFFICE_IP" ]; then
-        # At office
+    # Check if it's a new day - reset state
+    if [ "$checkin_date" != "$TODAY" ]; then
+        echo "New day detected, resetting state"
+        save_state "checkout_done" ""
+        checkout_done=""
+    fi
+
+    if is_office_ip "$CURRENT_IP"; then
+        echo "IP is within office range"
 
         # 1. Check-in reminder (once per day)
         if [ "$checkin_date" != "$TODAY" ]; then
             echo "Arrived at office - sending check-in reminder"
             send_notification "RMS Reminder" "You've arrived at office! Time to check in." "open"
             save_state "checkin_date" "$TODAY"
+            save_state "checkin_timestamp" "$CURRENT_TIMESTAMP"
+            save_state "checkout_done" ""
         else
             echo "Already sent check-in reminder today"
-        fi
 
-        # 2. Check-out reminder (during configured window, if checked in but not checked out)
-        if is_checkout_time; then
-            if [ "$checkin_date" = "$TODAY" ] && [ "$checkout_date" != "$TODAY" ]; then
-                echo "Checkout window - sending check-out reminder"
-                send_notification "RMS Reminder" "Don't forget to check out before leaving!" "open"
+            # 2. Check-out reminder (once, 8 hours after check-in)
+            if [ -n "$checkin_timestamp" ] && [ "$checkout_done" != "$TODAY" ]; then
+                local seconds_since_checkin=$((CURRENT_TIMESTAMP - checkin_timestamp))
+                local hours_since_checkin=$((seconds_since_checkin / 3600))
+                local required_seconds=$((HOURS_BEFORE_CHECKOUT * 3600))
+
+                echo "Seconds since check-in: $seconds_since_checkin"
+                echo "Hours since check-in: $hours_since_checkin"
+
+                if [ "$seconds_since_checkin" -ge "$required_seconds" ]; then
+                    echo "8 hours completed and still at office - sending check-out reminder"
+                    send_notification "RMS Reminder" "8 hours completed! Time to check out." "open"
+                    save_state "checkout_done" "$TODAY"
+                else
+                    local remaining_seconds=$((required_seconds - seconds_since_checkin))
+                    local remaining_hours=$((remaining_seconds / 3600))
+                    local remaining_minutes=$(((remaining_seconds % 3600) / 60))
+                    echo "Checkout reminder in ${remaining_hours}h ${remaining_minutes}m"
+                fi
             else
-                echo "In checkout window but either not checked in today or already reminded checkout"
+                echo "Checkout already done today or no check-in timestamp"
             fi
-        else
-            echo "Not in checkout reminder window"
         fi
     else
-        # Not at office
-        echo "Not at office IP, no action needed"
+        echo "IP is NOT within office range"
 
-        # Mark checkout as done if we leave after checking in
-        if [ "$checkin_date" = "$TODAY" ] && [ "$checkout_date" != "$TODAY" ]; then
-            echo "Left office after check-in, marking checkout reminder as done"
-            save_state "checkout_date" "$TODAY"
+        # If user is outside office and 8 hours have passed since check-in, mark checkout as done (discarded)
+        if [ "$checkin_date" = "$TODAY" ] && [ -n "$checkin_timestamp" ] && [ "$checkout_done" != "$TODAY" ]; then
+            local seconds_since_checkin=$((CURRENT_TIMESTAMP - checkin_timestamp))
+            local required_seconds=$((HOURS_BEFORE_CHECKOUT * 3600))
+
+            if [ "$seconds_since_checkin" -ge "$required_seconds" ]; then
+                echo "8 hours passed while outside office - discarding checkout reminder"
+                save_state "checkout_done" "$TODAY"
+            else
+                echo "Less than 8 hours since check-in, checkout reminder still pending if user returns"
+            fi
         fi
     fi
 }
@@ -254,11 +255,8 @@ main() {
 main
 SCRIPT_EOF
 
-# Replace placeholders with actual values
-sed -i '' "s|__OFFICE_IP__|$OFFICE_IP|g" ~/Scripts/rms-checkin-reminder.sh
+# Replace placeholder with actual Chrome profile
 sed -i '' "s|__CHROME_PROFILE__|$CHROME_PROFILE|g" ~/Scripts/rms-checkin-reminder.sh
-sed -i '' "s|__CHECKOUT_START__|$CHECKOUT_START|g" ~/Scripts/rms-checkin-reminder.sh
-sed -i '' "s|__CHECKOUT_END__|$CHECKOUT_END|g" ~/Scripts/rms-checkin-reminder.sh
 
 # Make executable
 chmod +x ~/Scripts/rms-checkin-reminder.sh
@@ -319,9 +317,13 @@ echo "  Installation Complete!"
 echo "========================================"
 echo ""
 echo "Configuration:"
-echo "  • Office IP: $OFFICE_IP"
+echo "  • Office IP Range: 202.71.24.226 - 202.71.24.237"
 echo "  • Chrome Profile: $CHROME_PROFILE"
-echo "  • Checkout Reminder: ${CHECKOUT_START}:00 - ${CHECKOUT_END}:00"
+echo "  • Checkout Reminder: 8 hours after check-in"
+echo ""
+echo "How it works:"
+echo "  • Check-in reminder when you arrive at office"
+echo "  • Check-out reminder once after 8 hours (if still at office)"
 echo ""
 echo "Useful commands:"
 echo "  • Test now:    ~/Scripts/rms-checkin-reminder.sh"
