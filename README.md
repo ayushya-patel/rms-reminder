@@ -4,8 +4,8 @@ A macOS utility that automatically reminds you to check in and check out on the 
 
 ## Features
 
-- **Auto Check-in Reminder**: Notifies you once when you arrive at office (detected via IP)
-- **Auto Check-out Reminder**: Reminds you between 6-7 PM (configurable) while still at office
+- **Auto Check-in Reminder**: Notifies you once when you arrive at office (detected via IP range)
+- **Auto Check-out Reminder**: Reminds you once after 9 hours of check-in (if still at office)
 - **Opens RMS Portal**: Automatically opens the check-in page in your preferred Chrome profile
 - **No Performance Impact**: Runs every 2 minutes with negligible CPU/memory usage
 - **Privacy Friendly**: Only checks your public IP, no data sent anywhere
@@ -37,17 +37,14 @@ bash <(curl -sL https://raw.githubusercontent.com/ayushya-patel/rms-reminder/mai
    ./install.sh
    ```
 
-3. Follow the prompts to configure:
-   - Your office IP address
-   - Chrome profile to use
-   - Checkout reminder time window
+3. Follow the prompt to select your Chrome profile
 
 ## How It Works
 
 1. A background service runs every 2 minutes (and on network changes)
 2. It checks your current public IP address
-3. **Check-in**: When your IP matches the office IP (first time that day), it shows a notification and opens RMS
-4. **Check-out**: Between 6-7 PM, if you're still at office and haven't checked out, it reminds you repeatedly
+3. **Check-in**: When your IP is within the office range (first time that day), it shows a notification and opens RMS
+4. **Check-out**: 9 hours after check-in, if you're at office, it reminds you once to check out
 
 ## Configuration
 
@@ -55,10 +52,7 @@ The installer will prompt you for:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| Office IP | Your office's public IP address | Auto-detected |
 | Chrome Profile | Which Chrome profile to open RMS in | Default |
-| Checkout Start | When to start checkout reminders | 18 (6 PM) |
-| Checkout End | When to stop checkout reminders | 19 (7 PM) |
 
 ### Changing Configuration
 
