@@ -5,7 +5,7 @@
 # ============================================
 # This script sets up automatic reminders for RMS attendance
 # - Check-in: Notifies once when you arrive at office
-# - Check-out: Reminds once after 8 hours of check-in
+# - Check-out: Reminds once after 9 hours of check-in
 #
 # Requirements: macOS, Google Chrome
 #
@@ -89,7 +89,7 @@ cat > ~/Scripts/rms-checkin-reminder.sh << 'SCRIPT_EOF'
 
 # RMS Check-in/Check-out Reminder Script
 # - Check-in: Once when IP is within office range
-# - Check-out: Once, 8 hours after check-in (if at office when 8h complete)
+# - Check-out: Once, 9 hours after check-in (if at office when 8h complete)
 
 # Office IP Range (encoded)
 _RS="MjAyLjcxLjI0LjIyNg=="
@@ -104,7 +104,7 @@ TODAY=$(date +%Y-%m-%d)
 CURRENT_TIMESTAMP=$(date +%s)
 
 # Hours before checkout reminder
-HOURS_BEFORE_CHECKOUT=8
+HOURS_BEFORE_CHECKOUT=9
 
 # Get current public IP
 get_current_ip() {
@@ -208,7 +208,7 @@ main() {
         else
             echo "Already sent check-in reminder today"
 
-            # 2. Check-out reminder (once, 8 hours after check-in, if at office)
+            # 2. Check-out reminder (once, 9 hours after check-in, if at office)
             if [ -n "$checkin_timestamp" ] && [ "$checkout_done" != "$TODAY" ]; then
                 local seconds_since_checkin=$((CURRENT_TIMESTAMP - checkin_timestamp))
                 local hours_since_checkin=$((seconds_since_checkin / 3600))
@@ -218,8 +218,8 @@ main() {
                 echo "Hours since check-in: $hours_since_checkin"
 
                 if [ "$seconds_since_checkin" -ge "$required_seconds" ]; then
-                    echo "8 hours completed and at office - sending check-out reminder"
-                    send_notification "RMS Reminder" "8 hours completed! Time to check out." "open"
+                    echo "9 hours completed and at office - sending check-out reminder"
+                    send_notification "RMS Reminder" "9 hours completed! Time to check out." "open"
                     save_state "checkout_done" "$TODAY"
                 else
                     local remaining_seconds=$((required_seconds - seconds_since_checkin))
@@ -303,11 +303,11 @@ echo "========================================"
 echo ""
 echo "Configuration:"
 echo "  • Chrome Profile: $CHROME_PROFILE"
-echo "  • Checkout Reminder: 8 hours after check-in"
+echo "  • Checkout Reminder: 9 hours after check-in"
 echo ""
 echo "How it works:"
 echo "  • Check-in reminder when you arrive at office"
-echo "  • Check-out reminder once after 8 hours (if at office)"
+echo "  • Check-out reminder once after 9 hours (if at office)"
 echo ""
 echo "Useful commands:"
 echo "  • Test now:    ~/Scripts/rms-checkin-reminder.sh"
