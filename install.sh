@@ -93,7 +93,7 @@ cat > ~/Scripts/rms-checkin-reminder.sh << 'SCRIPT_EOF'
 
 # RMS Check-in/Check-out Reminder Script
 # - Check-in: Once when IP is within office range
-# - Check-out: Once, 8 hours after check-in (if still at office)
+# - Check-out: Once, 8 hours after check-in (if at office when 8h complete)
 
 # Office IP Range: 202.71.24.226 to 202.71.24.237
 IP_RANGE_START="202.71.24.226"
@@ -235,20 +235,8 @@ main() {
             fi
         fi
     else
-        echo "IP is NOT within office range"
-
-        # If user is outside office and 8 hours have passed since check-in, mark checkout as done (discarded)
-        if [ "$checkin_date" = "$TODAY" ] && [ -n "$checkin_timestamp" ] && [ "$checkout_done" != "$TODAY" ]; then
-            local seconds_since_checkin=$((CURRENT_TIMESTAMP - checkin_timestamp))
-            local required_seconds=$((HOURS_BEFORE_CHECKOUT * 3600))
-
-            if [ "$seconds_since_checkin" -ge "$required_seconds" ]; then
-                echo "8 hours passed while outside office - discarding checkout reminder"
-                save_state "checkout_done" "$TODAY"
-            else
-                echo "Less than 8 hours since check-in, checkout reminder still pending if user returns"
-            fi
-        fi
+        echo "IP is NOT within office range - no action"
+        # Don't discard checkout - user might come back to office later
     fi
 }
 
