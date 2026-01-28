@@ -10,6 +10,9 @@
 # Requirements: macOS, Google Chrome
 # ============================================
 
+# IMPORTANT: Redirect stdin from /dev/tty to allow user input when piped
+exec < /dev/tty
+
 echo "========================================"
 echo "  RMS Reminder - Installation Script"
 echo "========================================"
